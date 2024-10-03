@@ -1,29 +1,55 @@
 import discord
 import os
+import openai
 
-# Define the intents (what your bot should be able to listen for)
-intents = discord.Intents.default()  # This enables the default intents
-intents.message_content = True  # You need to explicitly allow access to message content
+# Set up your OpenAI API key (from environment variable or hardcoded)
+openai.api_key = os.getenv('OPENAI_API_KEY')
 
-# Create a client instance that represents the bot
+# Define intents for the bot
+intents = discord.Intents.default()
+intents.message_content = True
+
+# Create the bot client
 client = discord.Client(intents=intents)
 
-# Define an event that will trigger when the bot has connected to Discord
+# Function to get a response from GPT using the new API (>= v1.0.0)
+async def get_chatgpt_response(prompt):
+    try:
+        # Use the correct method for OpenAI >= v1.0.0
+        response = openai.chat.completions.create(
+            model="gpt-4",  # Or use "gpt-4" if you have access
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=150  # Adjust as necessary
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+# Event that triggers when the bot is ready
 @client.event
 async def on_ready():
     print(f'We have logged in as {client.user}')
 
-# Define an event that will trigger when a message is sent in the chat
+# Event that triggers when a message is sent in the server
 @client.event
 async def on_message(message):
-    # Make sure the bot does not reply to itself
     if message.author == client.user:
         return
 
-    # Example of bot responding to a specific message
-    if message.content.startswith('!hello'):
-        await message.channel.send('Hello!')
+    # Respond to the keyword "Yo"
+    if message.content.startswith('Yo'):
+        user_message = message.content[len('Yo '):]  # Extract the part after "Yo"
 
-# Run the bot using the token
-token = os.getenv('DISCORD_BOT_TOKEN')  # You'll set this in your environment variables
+        # Send a typing indicator while processing
+        async with message.channel.typing():
+            gpt_response = await get_chatgpt_response(user_message)
+        
+        # Send the response back to the Discord channel
+        await message.channel.send(gpt_response)
+
+# Run the bot
+token = os.getenv('DISCORD_BOT_TOKEN')  # Make sure your bot token is set here
 client.run(token)
