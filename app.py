@@ -8,6 +8,7 @@ openai.api_key = os.getenv('OPENAI_API_KEY')
 # Define intents for the bot
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True  # This is required to listen for member join events
 
 # Create the bot client
 client = discord.Client(intents=intents)
@@ -16,12 +17,12 @@ client = discord.Client(intents=intents)
 async def get_chatgpt_response(prompt):
     try:
         response = openai.chat.completions.create(
-            model="gpt-4",  # Or use "gpt-4" if you have access
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=150  # Adjust as necessary
+            max_tokens=150
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
@@ -47,9 +48,20 @@ def check_identity(message_content):
 async def on_ready():
     print(f'We have logged in as {client.user}')
 
+# Event to welcome new members
+@client.event
+async def on_member_join(member):
+    # Find the channel where the bot should send the welcome message
+    channel = discord.utils.get(member.guild.text_channels, name='general')  # Replace 'general' with your channel
+
+    if channel:
+        # Send a custom welcome message to the new member
+        await channel.send(f"Welcome to the thunderdome, {member.mention}, you stupid SOB!")
+
 # Event that triggers when a message is sent in the server
 @client.event
 async def on_message(message):
+    # Prevent the bot from responding to itself
     if message.author == client.user:
         return
 
