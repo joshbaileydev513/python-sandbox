@@ -1,6 +1,8 @@
 import discord
 import os
 import openai
+import yt_dlp as youtube_dl
+import asyncio
 
 # Set up your OpenAI API key (from environment variable or hardcoded)
 openai.api_key = os.getenv('OPENAI_API_KEY')
@@ -43,6 +45,42 @@ def check_identity(message_content):
     
     return None
 
+# YouTube DL options
+youtube_dl_opts = {
+    'format': 'bestaudio/best',
+    'quiet': True,
+    'extractaudio': True,
+    'audioformat': 'mp3',
+    'noplaylist': True,
+}
+
+# Function to join the voice channel and play music from YouTube
+async def play_music(voice_channel, url):
+    try:
+        # Join the voice channel
+        voice_client = await voice_channel.connect()
+        
+        # Use youtube_dl to extract audio source
+        with youtube_dl.YoutubeDL(youtube_dl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            url2 = info['formats'][0]['url']
+            audio_source = await discord.FFmpegOpusAudio.from_probe(url2)
+        
+        # Play the audio
+        voice_client.play(audio_source, after=lambda e: print("Music ended:", e))
+        
+        # Keep playing indefinitely until the user stops the bot
+        while voice_client.is_playing():
+            await asyncio.sleep(1)
+        
+        # Disconnect after music stops
+        await voice_client.disconnect()
+
+    except Exception as e:
+        print(f"Error playing music: {e}")
+        if voice_client:
+            await voice_client.disconnect()
+
 # Event that triggers when the bot is ready
 @client.event
 async def on_ready():
@@ -71,15 +109,27 @@ async def on_message(message):
         await message.channel.send(identity_response)
         return
 
-    # Process all other messages through GPT-4
-    user_message = message.content  # Extract the entire message
+    # Command to play LoFi music in the voice channel
+    if message.content.startswith('!playmusic'):
+        voice_channel = discord.utils.get(message.guild.voice_channels, name='General')  # Adjust 'general' to your voice channel's name
+        
+        if voice_channel:
+            await message.channel.send("Joining voice channel and playing LoFi music...")
+            # LoFi stream URL from YouTube
+            await play_music(voice_channel, 'https://www.youtube.com/watch?v=jfKfPfyJRdk')
+        else:
+            await message.channel.send("General voice channel not found.")
 
-    # Send a typing indicator while processing
-    async with message.channel.typing():
-        gpt_response = await get_chatgpt_response(user_message)
-    
-    # Send the response back to the Discord channel
-    await message.channel.send(gpt_response)
+    # Process all other messages through GPT-4
+    else:
+        user_message = message.content  # Extract the entire message
+
+        # Send a typing indicator while processing
+        async with message.channel.typing():
+            gpt_response = await get_chatgpt_response(user_message)
+        
+        # Send the response back to the Discord channel
+        await message.channel.send(gpt_response)
 
 # Run the bot
 token = os.getenv('DISCORD_BOT_TOKEN')  # Make sure your bot token is set here
