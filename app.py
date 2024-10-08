@@ -119,14 +119,25 @@ async def on_message(message):
         await message.channel.send(identity_response)
         return
 
-    # Command to play LoFi music in the voice channel
-    if message.content.startswith('/chill'):
-        voice_channel = discord.utils.get(message.guild.voice_channels, name='General')  # Adjust 'general' to your voice channel's name
+    # Command to play LoFi music in the voice channel (both /chill and /play)
+    if message.content.startswith('/chill') or message.content.startswith('/play'):
+        voice_channel = discord.utils.get(message.guild.voice_channels, name='General')  # Adjust 'General' to your voice channel's name
         
         if voice_channel:
             await message.channel.send("Joining voice channel and playing LoFi music...")
-            # LoFi stream URL from YouTube
-            voice_client = await play_music(voice_channel, 'https://www.youtube.com/watch?v=jfKfPfyJRdk')
+
+            # Play the music as a background task
+            asyncio.create_task(play_music(voice_channel, 'https://www.youtube.com/watch?v=jfKfPfyJRdk'))
+
+            # If the user used /chill, send the special message
+            if message.content.startswith('/chill'):
+                # Use the same logic as the welcome message
+                channel = discord.utils.get(message.guild.text_channels, name='general')  # This is the same logic as in on_member_join
+
+                if channel:
+                    await channel.send(f"Thanks {message.author.mention} for taking the conscious effort to have a chill day 🍁")
+                else:
+                    await message.channel.send("General text channel not found.")
         else:
             await message.channel.send("General voice channel not found.")
 
@@ -142,7 +153,8 @@ async def on_message(message):
     elif message.content.startswith('/help'):
         help_message = (
             "**Here are the available commands:**\n"
-            "`/chill` - Play LoFi music in the voice channel.\n"
+            "`/play` - Play LoFi music in the voice channel.\n"
+            "`/chill` - Play LoFi music and send a chill message.\n"
             "`/stop` - Stop the music and disconnect the bot.\n"
             "`/help` - Show this list of commands."
         )
