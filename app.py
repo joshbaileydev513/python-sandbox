@@ -15,6 +15,9 @@ intents.members = True  # This is required to listen for member join events
 # Create the bot client
 client = discord.Client(intents=intents)
 
+# Initialize voice_client globally
+voice_client = None
+
 # Function to get a response from GPT using the new API (>= v1.0.0)
 async def get_chatgpt_response(prompt):
     try:
@@ -56,6 +59,7 @@ youtube_dl_opts = {
 
 # Function to join the voice channel and play music from YouTube
 async def play_music(voice_channel, url):
+    global voice_client  # Declare voice_client as global
     try:
         # Join the voice channel
         voice_client = await voice_channel.connect()
@@ -73,13 +77,17 @@ async def play_music(voice_channel, url):
         while voice_client.is_playing():
             await asyncio.sleep(1)
         
-        # Disconnect after music stops
-        await voice_client.disconnect()
-
+        return voice_client  # Return the voice client to stop the music later
     except Exception as e:
         print(f"Error playing music: {e}")
-        if voice_client:
-            await voice_client.disconnect()
+        return None
+
+# Function to stop music and disconnect
+async def stop_music(voice_client):
+    if voice_client and voice_client.is_connected():
+        if voice_client.is_playing():
+            voice_client.stop()  # Stop the currently playing music
+        await voice_client.disconnect()
 
 # Event that triggers when the bot is ready
 @client.event
@@ -99,6 +107,8 @@ async def on_member_join(member):
 # Event that triggers when a message is sent in the server
 @client.event
 async def on_message(message):
+    global voice_client  # Access the global voice_client
+    
     # Prevent the bot from responding to itself
     if message.author == client.user:
         return
@@ -110,15 +120,33 @@ async def on_message(message):
         return
 
     # Command to play LoFi music in the voice channel
-    if message.content.startswith('!playmusic'):
+    if message.content.startswith('/chill'):
         voice_channel = discord.utils.get(message.guild.voice_channels, name='General')  # Adjust 'general' to your voice channel's name
         
         if voice_channel:
             await message.channel.send("Joining voice channel and playing LoFi music...")
             # LoFi stream URL from YouTube
-            await play_music(voice_channel, 'https://www.youtube.com/watch?v=jfKfPfyJRdk')
+            voice_client = await play_music(voice_channel, 'https://www.youtube.com/watch?v=jfKfPfyJRdk')
         else:
             await message.channel.send("General voice channel not found.")
+
+    # Command to stop music and disconnect from the voice channel
+    elif message.content.startswith('/stop'):
+        if voice_client:
+            await message.channel.send("Stopping the music and disconnecting...")
+            await stop_music(voice_client)
+        else:
+            await message.channel.send("Not connected to a voice channel.")
+
+    # Command to display available commands
+    elif message.content.startswith('/help'):
+        help_message = (
+            "**Here are the available commands:**\n"
+            "`/chill` - Play LoFi music in the voice channel.\n"
+            "`/stop` - Stop the music and disconnect the bot.\n"
+            "`/help` - Show this list of commands."
+        )
+        await message.channel.send(help_message)
 
     # Process all other messages through GPT-4
     else:
