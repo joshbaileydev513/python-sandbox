@@ -3,6 +3,8 @@ import os
 import openai
 import yt_dlp as youtube_dl
 import asyncio
+from discord import app_commands
+from discord.ext import commands
 
 # Set up your OpenAI API key (from environment variable or hardcoded)
 openai.api_key = os.getenv('OPENAI_API_KEY')
@@ -12,8 +14,8 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True  # This is required to listen for member join events
 
-# Create the bot client
-client = discord.Client(intents=intents)
+# Create a bot instance
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Initialize voice_client globally
 voice_client = None
@@ -32,21 +34,6 @@ async def get_chatgpt_response(prompt):
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Error: {str(e)}"
-
-# Function to handle personality-based responses
-def check_identity(message_content):
-    identity_prompts = [
-        "who are you", 
-        "what is your name", 
-        "what are you", 
-        "tell me about yourself"
-    ]
-    
-    for prompt in identity_prompts:
-        if prompt in message_content.lower():
-            return "I am josh-bot, the all-inclusive Discord bot giving a glimpse into the mind of Human Josh, my fleshy overlord!"
-    
-    return None
 
 # YouTube DL options
 youtube_dl_opts = {
@@ -89,88 +76,75 @@ async def stop_music(voice_client):
             voice_client.stop()  # Stop the currently playing music
         await voice_client.disconnect()
 
+# Slash command to play LoFi music and send a chill message
+@bot.tree.command(name="chill", description="Play LoFi music and send a chill message")
+async def chill(interaction: discord.Interaction):
+    voice_channel = discord.utils.get(interaction.guild.voice_channels, name='General')
+    if voice_channel:
+        await interaction.response.send_message("Joining voice channel and playing LoFi music...")
+        
+        # Play the music as a background task
+        asyncio.create_task(play_music(voice_channel, 'https://www.youtube.com/watch?v=jfKfPfyJRdk'))
+
+        # Send a chill message to the general channel
+        channel = discord.utils.get(interaction.guild.text_channels, name='general')
+        if channel:
+            await channel.send(f"Thanks {interaction.user.mention} for taking the conscious effort to have a chill day 🍁")
+    else:
+        await interaction.response.send_message("General voice channel not found.")
+
+# Slash command to play LoFi music without the chill message
+@bot.tree.command(name="play", description="Play LoFi music in the voice channel")
+async def play(interaction: discord.Interaction):
+    voice_channel = discord.utils.get(interaction.guild.voice_channels, name='General')
+    if voice_channel:
+        await interaction.response.send_message("Joining voice channel and playing LoFi music...")
+        # Play the music as a background task
+        asyncio.create_task(play_music(voice_channel, 'https://www.youtube.com/watch?v=jfKfPfyJRdk'))
+    else:
+        await interaction.response.send_message("General voice channel not found.")
+
+# Slash command to stop music and disconnect
+@bot.tree.command(name="stop", description="Stop music and disconnect from the voice channel")
+async def stop(interaction: discord.Interaction):
+    global voice_client
+    if voice_client and voice_client.is_connected():
+        await stop_music(voice_client)
+        await interaction.response.send_message("Stopping the music and disconnecting...")
+    else:
+        await interaction.response.send_message("Not connected to a voice channel.")
+
+# Slash command to show help
+@bot.tree.command(name="help", description="Show the available commands")
+async def help_command(interaction: discord.Interaction):
+    help_message = (
+        "**Here are the available commands:**\n"
+        "`/play` - Play LoFi music in the voice channel.\n"
+        "`/chill` - Play LoFi music and send a chill message.\n"
+        "`/stop` - Stop the music and disconnect the bot.\n"
+        "`/help` - Show this list of commands."
+    )
+    await interaction.response.send_message(help_message)
+
 # Event that triggers when the bot is ready
-@client.event
+@bot.event
 async def on_ready():
-    print(f'We have logged in as {client.user}')
+    print(f'We have logged in as {bot.user}')
+    try:
+        synced = await bot.tree.sync()  # Sync commands with Discord
+        print(f"Synced {len(synced)} commands")
+    except Exception as e:
+        print(f"Error syncing commands: {e}")
 
 # Event to welcome new members
-@client.event
+@bot.event
 async def on_member_join(member):
     # Find the channel where the bot should send the welcome message
     channel = discord.utils.get(member.guild.text_channels, name='general')  # Replace 'general' with your channel
-
     if channel:
         # Send a custom welcome message to the new member
         await channel.send(f"Welcome to the thunderdome, {member.mention}, you stupid SOB!")
 
-# Event that triggers when a message is sent in the server
-@client.event
-async def on_message(message):
-    global voice_client  # Access the global voice_client
-    
-    # Prevent the bot from responding to itself
-    if message.author == client.user:
-        return
-
-    # Check if the message asks about the bot's identity
-    identity_response = check_identity(message.content)
-    if identity_response:
-        await message.channel.send(identity_response)
-        return
-
-    # Command to play LoFi music in the voice channel (both /chill and /play)
-    if message.content.startswith('/chill') or message.content.startswith('/play'):
-        voice_channel = discord.utils.get(message.guild.voice_channels, name='General')  # Adjust 'General' to your voice channel's name
-        
-        if voice_channel:
-            await message.channel.send("Joining voice channel and playing LoFi music...")
-
-            # Play the music as a background task
-            asyncio.create_task(play_music(voice_channel, 'https://www.youtube.com/watch?v=jfKfPfyJRdk'))
-
-            # If the user used /chill, send the special message
-            if message.content.startswith('/chill'):
-                # Use the same logic as the welcome message
-                channel = discord.utils.get(message.guild.text_channels, name='general')  # This is the same logic as in on_member_join
-
-                if channel:
-                    await channel.send(f"Thanks {message.author.mention} for taking the conscious effort to have a chill day 🍁")
-                else:
-                    await message.channel.send("General text channel not found.")
-        else:
-            await message.channel.send("General voice channel not found.")
-
-    # Command to stop music and disconnect from the voice channel
-    elif message.content.startswith('/stop'):
-        if voice_client:
-            await message.channel.send("Stopping the music and disconnecting...")
-            await stop_music(voice_client)
-        else:
-            await message.channel.send("Not connected to a voice channel.")
-
-    # Command to display available commands
-    elif message.content.startswith('/help'):
-        help_message = (
-            "**Here are the available commands:**\n"
-            "`/play` - Play LoFi music in the voice channel.\n"
-            "`/chill` - Play LoFi music and send a chill message.\n"
-            "`/stop` - Stop the music and disconnect the bot.\n"
-            "`/help` - Show this list of commands."
-        )
-        await message.channel.send(help_message)
-
-    # Process all other messages through GPT-4
-    else:
-        user_message = message.content  # Extract the entire message
-
-        # Send a typing indicator while processing
-        async with message.channel.typing():
-            gpt_response = await get_chatgpt_response(user_message)
-        
-        # Send the response back to the Discord channel
-        await message.channel.send(gpt_response)
-
 # Run the bot
 token = os.getenv('DISCORD_BOT_TOKEN')  # Make sure your bot token is set here
-client.run(token)
+bot.run(token)
