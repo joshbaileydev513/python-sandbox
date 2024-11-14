@@ -18,6 +18,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True  # This is required to listen for member join events
 intents.guilds = True  # Required for application commands (slash commands)
+intents.messages = True 
 
 # Create a bot instance
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -30,7 +31,13 @@ voice_client = None
 
 # Function to get a response from GPT using the new API (>= v1.0.0)
 async def get_chatgpt_response(prompt):
+    print(f"Attempting to get ChatGPT response for prompt: {prompt}")
     try:
+        if not openai.api_key:
+            print("Error: OpenAI API key is not set")
+            return "Error: OpenAI API key is not configured."
+        
+        print("Making API call to OpenAI...")
         response = openai.chat.completions.create(
             model="gpt-4",
             messages=[
@@ -39,24 +46,12 @@ async def get_chatgpt_response(prompt):
             ],
             max_tokens=150
         )
+        print("Successfully received response from OpenAI")
         return response.choices[0].message.content.strip()
     except Exception as e:
+        print(f"Error in get_chatgpt_response: {str(e)}")
         return f"Error: {str(e)}"
     
-# Function to handle personality-based responses
-def check_identity(message_content):
-    identity_prompts = [
-        "who are you", 
-        "what is your name", 
-        "what are you", 
-        "tell me about yourself"
-    ]
-    
-    for prompt in identity_prompts:
-        if prompt in message_content.lower():
-            return "I am josh-bot, the all-inclusive Discord bot giving a glimpse into the mind of Human Josh, my fleshy overlord!"
-    
-    return None
 
 # YouTube DL options
 youtube_dl_opts = {
@@ -305,6 +300,7 @@ async def help_command(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     print(f'We have logged in as {bot.user} (ID: {bot.user.id})')
+    print(f"OpenAI API Key status: {'Set' if openai.api_key else 'Not Set'}")
     try:
         synced = await bot.tree.sync()  # Sync commands with Discord
         print(f"Synced {len(synced)} commands")
@@ -319,6 +315,33 @@ async def on_member_join(member):
     if channel:
         # Send a custom welcome message to the new member
         await channel.send(f"Welcome to the thunderdome, {member.mention}, you stupid SOB!")
+
+# Add this event handler for messages
+@bot.event
+async def on_message(message):
+    try:
+        # Ignore messages from the bot itself
+        if message.author == bot.user:
+            return
+
+        # Process commands first (important to keep slash commands working)
+        await bot.process_commands(message)
+
+        # Debug logging
+        print(f"Message received: {message.content}")
+        print(f"Message author: {message.author}")
+
+        # Respond to all messages (no mention required)
+        if message.content:
+            async with message.channel.typing():
+                print("Getting ChatGPT response...")
+                response = await get_chatgpt_response(message.content)
+                print(f"ChatGPT response received: {response}")
+                await message.reply(response)
+
+    except Exception as e:
+        print(f"Error in on_message: {str(e)}")
+        await message.channel.send(f"An error occurred while processing your message: {str(e)}")
 
 # Run the bot
 token = os.getenv('DISCORD_BOT_TOKEN')  # Make sure your bot token is set here
