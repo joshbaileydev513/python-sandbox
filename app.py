@@ -31,7 +31,7 @@ voice_client = None
 # Function to get a response from GPT using the new API (>= v1.0.0)
 async def get_chatgpt_response(prompt):
     try:
-        response = openai.ChatCompletion.create(
+        response = openai.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
@@ -42,6 +42,21 @@ async def get_chatgpt_response(prompt):
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Error: {str(e)}"
+    
+# Function to handle personality-based responses
+def check_identity(message_content):
+    identity_prompts = [
+        "who are you", 
+        "what is your name", 
+        "what are you", 
+        "tell me about yourself"
+    ]
+    
+    for prompt in identity_prompts:
+        if prompt in message_content.lower():
+            return "I am josh-bot, the all-inclusive Discord bot giving a glimpse into the mind of Human Josh, my fleshy overlord!"
+    
+    return None
 
 # YouTube DL options
 youtube_dl_opts = {
